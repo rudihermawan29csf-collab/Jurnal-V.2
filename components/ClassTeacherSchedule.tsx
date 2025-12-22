@@ -86,6 +86,28 @@ const NOTE_SUGGESTIONS = [
   "Perlu pengulangan materi pada pertemuan berikutnya."
 ];
 
+const HOMEROOM_ISSUE_SUGGESTIONS = [
+  "Sering datang terlambat ke sekolah",
+  "Tidak masuk tanpa keterangan (Alpha)",
+  "Tidak mengerjakan tugas/PR berkali-kali",
+  "Bertengkar/selisih paham dengan teman",
+  "Berpakaian tidak rapi/atribut tidak lengkap",
+  "Membawa barang yang dilarang (HP/Lainnya)",
+  "Kurang fokus dan mengantuk saat pelajaran",
+  "Siswa terlihat murung dan kurang bersosialisasi"
+];
+
+const HOMEROOM_SOLUTION_SUGGESTIONS = [
+  "Bimbingan individu dan nasehat lisan",
+  "Pemberian teguran tertulis dan pembinaan",
+  "Panggilan Orang Tua/Wali Murid",
+  "Home visit (Kunjungan ke rumah siswa)",
+  "Mediasi antar siswa yang bermasalah",
+  "Dirujuk ke Guru BK untuk bimbingan khusus",
+  "Pemberian motivasi dan pantauan berkala",
+  "Siswa membuat surat pernyataan tidak mengulangi"
+];
+
 const COMMON_ACTIONS = [
   "Teguran lisan", "Pemberian poin prestasi", "Bimbingan individu", 
   "Pemanggilan orang tua", "Nasehat keagamaan", "Penugasan khusus"
@@ -1417,41 +1439,93 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
       <div className="space-y-6 animate-fade-in">
          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 bg-white p-6 rounded-xl border border-gray-200 shadow-sm h-fit">
-               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><ClipboardList className="text-indigo-600"/> {editingHomeroomId ? 'Edit Catatan' : 'Input Catatan Baru'}</h3>
+               <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><ClipboardList className="text-indigo-600"/> {editingHomeroomId ? 'Edit Catatan' : 'Input Catatan Wali Kelas'}</h3>
                <form onSubmit={handleHomeroomSubmit} className="space-y-4">
-                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Tanggal</label><input type="date" value={homeroomForm.date} onChange={(e) => setHomeroomForm({...homeroomForm, date: e.target.value})} className="w-full border rounded px-3 py-2 text-sm" required /></div>
-                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Kelas Binaan</label><select value={homeroomForm.className} onChange={(e) => setHomeroomForm({...homeroomForm, className: e.target.value, studentIds: []})} className="w-full border rounded px-3 py-2 text-sm">{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Tanggal</label><input type="date" value={homeroomForm.date} onChange={(e) => setHomeroomForm({...homeroomForm, date: e.target.value})} className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" required /></div>
+                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Kelas Binaan</label><select value={homeroomForm.className} onChange={(e) => setHomeroomForm({...homeroomForm, className: e.target.value, studentIds: []})} className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500">{CLASSES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">Nama Siswa</label>
                     <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50 space-y-1 custom-scrollbar">
                       {studentsInClass.map(s => (
-                        <label key={s.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+                        <label key={s.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded group">
                           <input type="checkbox" checked={homeroomForm.studentIds.includes(s.id)} onChange={() => setHomeroomForm(prev => ({...prev, studentIds: prev.studentIds.includes(s.id) ? prev.studentIds.filter(id => id !== s.id) : [...prev.studentIds, s.id]}))} className="rounded text-indigo-600 focus:ring-indigo-500"/>
-                          <span className="text-xs text-gray-700">{s.name}</span>
+                          <span className="text-xs text-gray-700 group-hover:text-indigo-600 transition-colors">{s.name}</span>
                         </label>
+                      ))}
+                      {studentsInClass.length === 0 && <p className="text-[10px] text-gray-400 italic p-2">Pilih kelas binaan terlebih dahulu</p>}
+                    </div>
+                  </div>
+                  
+                  {/* Kasus / Permasalahan with Suggestions */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-2">Kasus / Permasalahan <Sparkles size={12} className="text-indigo-500"/></label>
+                    <textarea 
+                      value={homeroomForm.violationType} 
+                      onChange={(e) => setHomeroomForm({...homeroomForm, violationType: e.target.value})} 
+                      className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 mb-2" 
+                      rows={2} 
+                      required 
+                      placeholder="Input manual atau pilih saran di bawah..."
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      {HOMEROOM_ISSUE_SUGGESTIONS.map((s, idx) => (
+                        <button 
+                          key={idx} 
+                          type="button" 
+                          onClick={() => setHomeroomForm({...homeroomForm, violationType: s})}
+                          className="text-[9px] bg-indigo-50 text-indigo-700 px-2 py-1 rounded border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                        >
+                          {s}
+                        </button>
                       ))}
                     </div>
                   </div>
-                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Kasus / Permasalahan</label><textarea value={homeroomForm.violationType} onChange={(e) => setHomeroomForm({...homeroomForm, violationType: e.target.value})} className="w-full border rounded px-3 py-2 text-sm" rows={2} required /></div>
-                  <div><label className="block text-xs font-bold text-gray-600 mb-1">Tindak Lanjut / Solusi</label><textarea value={homeroomForm.solution} onChange={(e) => setHomeroomForm({...homeroomForm, solution: e.target.value})} className="w-full border rounded px-3 py-2 text-sm" rows={2} required /></div>
-                  <button type="submit" className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors">Simpan Catatan</button>
+
+                  {/* Tindak Lanjut / Solusi with Suggestions */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 mb-1 flex items-center gap-2">Tindak Lanjut / Solusi <Sparkles size={12} className="text-emerald-500"/></label>
+                    <textarea 
+                      value={homeroomForm.solution} 
+                      onChange={(e) => setHomeroomForm({...homeroomForm, solution: e.target.value})} 
+                      className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 mb-2" 
+                      rows={2} 
+                      required 
+                      placeholder="Input manual atau pilih saran di bawah..."
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      {HOMEROOM_SOLUTION_SUGGESTIONS.map((s, idx) => (
+                        <button 
+                          key={idx} 
+                          type="button" 
+                          onClick={() => setHomeroomForm({...homeroomForm, solution: s})}
+                          className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100 hover:bg-emerald-100 transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button type="submit" className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-all shadow-md active:scale-95 flex items-center justify-center gap-2">
+                    <Save size={18}/> Simpan Catatan
+                  </button>
                </form>
             </div>
             <div className="lg:col-span-2 space-y-4">
               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <h3 className="font-bold text-gray-800">Riwayat Catatan Wali Kelas</h3>
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><ClipboardList size={18} className="text-indigo-600"/> Riwayat Catatan Wali Kelas</h3>
                 <div className="flex flex-wrap gap-2 items-center">
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-gray-500 uppercase">DARI TANGGAL</span>
-                    <input type="date" value={homeroomFilterFrom} onChange={(e) => setHomeroomFilterFrom(e.target.value)} className="border rounded px-2 py-1 text-xs bg-white" />
+                    <input type="date" value={homeroomFilterFrom} onChange={(e) => setHomeroomFilterFrom(e.target.value)} className="border rounded px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-indigo-500" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-gray-500 uppercase">SAMPAI TANGGAL</span>
-                    <input type="date" value={homeroomFilterTo} onChange={(e) => setHomeroomFilterTo(e.target.value)} className="border rounded px-2 py-1 text-xs bg-white" />
+                    <input type="date" value={homeroomFilterTo} onChange={(e) => setHomeroomFilterTo(e.target.value)} className="border rounded px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-indigo-500" />
                   </div>
                   <div className="flex flex-col gap-1">
                     <span className="text-[10px] font-bold text-red-500 uppercase">TANGGAL CETAK</span>
-                    <input type="date" value={homeroomPrintDate} onChange={(e) => setHomeroomPrintDate(e.target.value)} className="border border-red-200 rounded px-2 py-1 text-xs bg-red-50" />
+                    <input type="date" value={homeroomPrintDate} onChange={(e) => setHomeroomPrintDate(e.target.value)} className="border border-red-200 rounded px-2 py-1 text-xs bg-red-50 focus:ring-1 focus:ring-red-500" />
                   </div>
                   <div className="relative mt-auto" ref={homeroomDownloadRef}>
                     <button onClick={() => setIsHomeroomDownloadOpen(!isHomeroomDownloadOpen)} className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-bold hover:bg-gray-50 transition-colors">
@@ -1459,8 +1533,8 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
                     </button>
                     {isHomeroomDownloadOpen && (
                       <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-xl z-20 overflow-hidden animate-fade-in">
-                        <button onClick={exportHomeroomPDF} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"><FileText size={14} className="text-red-500"/> PDF</button>
-                        <button onClick={exportHomeroomExcel} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"><FileSpreadsheet size={14} className="text-green-600"/> Excel</button>
+                        <button onClick={exportHomeroomPDF} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"><FileText size={14} className="text-red-500"/> Download PDF</button>
+                        <button onClick={exportHomeroomExcel} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 flex items-center gap-2"><FileSpreadsheet size={14} className="text-green-600"/> Download Excel</button>
                       </div>
                     )}
                   </div>
@@ -1485,11 +1559,11 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
                         <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{rec.date}</td>
                           <td className="px-4 py-2 font-bold text-indigo-700">{students.find(s => s.id === rec.studentId)?.name || 'N/A'}</td>
-                          <td className="px-4 py-2 text-gray-600">{rec.violationType}</td>
+                          <td className="px-4 py-2 text-gray-600 font-medium">{rec.violationType}</td>
                           <td className="px-4 py-2 text-center">
                             <div className="flex justify-center gap-1">
-                              <button onClick={() => {setEditingHomeroomId(rec.id); setHomeroomForm({date: rec.date, className: rec.className, studentIds: [rec.studentId], violationType: rec.violationType, solution: rec.solution, notes: rec.notes});}} className="text-blue-500 hover:bg-blue-50 p-1 rounded"><Edit2 size={14}/></button>
-                              <button onClick={() => onDeleteHomeroomRecord && onDeleteHomeroomRecord(rec.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={14}/></button>
+                              <button onClick={() => {setEditingHomeroomId(rec.id); setHomeroomForm({date: rec.date, className: rec.className, studentIds: [rec.studentId], violationType: rec.violationType, solution: rec.solution, notes: rec.notes}); window.scrollTo({top:0, behavior:'smooth'});}} className="text-blue-500 hover:bg-blue-50 p-1 rounded transition-colors"><Edit2 size={14}/></button>
+                              <button onClick={() => onDeleteHomeroomRecord && onDeleteHomeroomRecord(rec.id)} className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"><Trash2 size={14}/></button>
                             </div>
                           </td>
                         </tr>
