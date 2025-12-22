@@ -1,0 +1,7 @@
+{
+  "name": "Jurnal Guru SMPN 3 Pacet v1.2",
+  "description": "Dashboard manajemen pembagian tugas guru, jadwal mengajar, dan analisis beban kerja sekolah.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
