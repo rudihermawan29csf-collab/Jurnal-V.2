@@ -77,7 +77,7 @@ const ACTIVITY_SUGGESTIONS = [
 ];
 
 const NOTE_SUGGESTIONS = [
-  "Siswa sangat antusias dan aktif bertanya.",
+  "Siswa sangat antusias and aktif bertanya.",
   "Beberapa siswa masih kesulitan memahami konsep dasar.",
   "Kondisi kelas kondusif dan tertib selama KBM.",
   "Terdapat gangguan teknis pada alat peraga/LCD.",
@@ -617,7 +617,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
       const stat = attendanceRecap[s.id] || {S:0, I:0, A:0};
       return {
         "No": idx + 1,
-        "Nama Siswa": s.name,
+        "Nama Siswa": stat.name,
         "Sakit": stat.S,
         "Izin": stat.I,
         "Alpha": stat.A,
@@ -637,31 +637,50 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
     doc.setFontSize(10); doc.text(`Kelas ${gradeClass} - Semester ${gradeSemester}`, 14, 21);
     
     const filteredStudents = students.filter(s => s.className === gradeClass);
+    
+    // Create detailed headers matching UI
+    // Fix: Using any[] to bypass strict typing issues with fillColor in multi-row headers
+    const headRow1: any[] = [
+      { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
+      { content: 'Nama Siswa', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }
+    ];
+    const headRow2: any[] = [];
+
+    for (let i = 1; i <= numChapters; i++) {
+      headRow1.push({ content: `BAB ${i}`, colSpan: 7, styles: { halign: 'center', fillColor: [51, 65, 85] } });
+      headRow2.push('F1', 'F2', 'F3', 'F4', 'F5', 'SUM', 'RR');
+    }
+
+    headRow1.push(
+      { content: 'STS', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [194, 65, 12] } },
+      { content: 'SAS', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [153, 27, 27] } },
+      { content: 'NA', rowSpan: 2, styles: { halign: 'center', valign: 'middle', fillColor: [15, 23, 42] } }
+    );
+
     const body = filteredStudents.map((s, idx) => {
       const recordId = `${s.id}_${gradeSubject}_${gradeSemester}`;
       const record = studentGrades.find(r => r.id === recordId);
+      const rowData = [idx + 1, s.name];
       
-      const chapterData = [];
       for(let i=1; i<=numChapters; i++) {
-         chapterData.push(record?.chapters[i as 1|2|3|4|5]?.avg || '-');
+         const ch = record?.chapters[i as 1|2|3|4|5] || {};
+         rowData.push(ch.f1 ?? '-', ch.f2 ?? '-', ch.f3 ?? '-', ch.f4 ?? '-', ch.f5 ?? '-', ch.sum ?? '-', ch.avg ?? '-');
       }
 
-      return [
-        idx + 1, s.name, 
-        ...chapterData,
-        record?.sts || '-', record?.sas || '-', 
-        record?.finalGrade || '-'
-      ];
+      rowData.push(record?.sts ?? '-', record?.sas ?? '-', record?.finalGrade ?? '-');
+      return rowData;
     });
-
-    const chapterHeaders = Array.from({length: numChapters}, (_, i) => `B${i+1}`);
 
     autoTable(doc, {
       startY: 25,
-      head: [['No', 'Nama Siswa', ...chapterHeaders, 'STS', 'SAS', 'NA']],
+      head: [headRow1, headRow2],
       body: body,
       theme: 'grid',
-      headStyles: { fillColor: [15, 23, 42] }
+      styles: { fontSize: 6, cellPadding: 1, halign: 'center' },
+      headStyles: { fillColor: [30, 41, 59], textColor: 255 },
+      columnStyles: {
+        1: { halign: 'left', cellWidth: 35 } // Nama Siswa
+      }
     });
 
     addSignatureToPDF(doc, new Date().toISOString().split('T')[0]);
@@ -676,7 +695,14 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
       
       const res: any = { "No": idx + 1, "Nama Siswa": s.name };
       for(let i=1; i<=numChapters; i++) {
-         res[`Bab ${i}`] = record?.chapters[i as 1|2|3|4|5]?.avg || 0;
+         const ch = record?.chapters[i as 1|2|3|4|5] || {};
+         res[`Bab ${i} F1`] = ch.f1 ?? 0;
+         res[`Bab ${i} F2`] = ch.f2 ?? 0;
+         res[`Bab ${i} F3`] = ch.f3 ?? 0;
+         res[`Bab ${i} F4`] = ch.f4 ?? 0;
+         res[`Bab ${i} F5`] = ch.f5 ?? 0;
+         res[`Bab ${i} SUM`] = ch.sum ?? 0;
+         res[`Bab ${i} Rerata`] = ch.avg ?? 0;
       }
       res["STS"] = record?.sts || 0;
       res["SAS"] = record?.sas || 0;
@@ -686,7 +712,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
     });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Nilai");
+    XLSX.utils.book_append_sheet(wb, ws, "Nilai Siswa");
     XLSX.writeFile(wb, `Nilai_${gradeClass.replace(' ', '_')}_${gradeSubject.replace(' ', '_')}.xlsx`);
   };
 
@@ -1191,10 +1217,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
               </div>
               <div><label className="block text-xs font-bold text-gray-600 mb-1">Uraian Kegiatan</label><textarea value={agendaForm.activity} onChange={(e) => onActivityChange(e.target.value)} className="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500" rows={3} required placeholder="Contoh: Mengajar di kelas VII A, Rapat koordinasi..." /></div>
               <div><label className="block text-xs font-bold text-gray-600 mb-1">Keterangan (Otomatis)</label><input type="text" value={agendaForm.remarks} onChange={(e) => setAgendaForm({...agendaForm, remarks: e.target.value})} className="w-full border rounded px-3 py-2 text-sm bg-gray-50" placeholder="Terlaksana / Selesai / Sesuai jadwal..." /></div>
-              <div className="flex gap-2 pt-2">
-                {editingAgendaId && <button type="button" onClick={() => {setEditingAgendaId(null); setAgendaForm({date: new Date().toISOString().split('T')[0], timeStart: '07:00', timeEnd: '08:00', activity: '', remarks: ''});}} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-bold">Batal</button>}
-                <button type="submit" className="flex-[2] py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors shadow-sm">{editingAgendaId ? 'Update Agenda' : 'Simpan Agenda'}</button>
-              </div>
+              <div className="flex gap-2 pt-2">{editingAgendaId && <button type="button" onClick={() => {setEditingAgendaId(null); setAgendaForm({date: new Date().toISOString().split('T')[0], timeStart: '07:00', timeEnd: '08:00', activity: '', remarks: ''});}} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-bold">Batal</button>}<button type="submit" className="flex-[2] py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors shadow-sm">{editingAgendaId ? 'Update Agenda' : 'Simpan Agenda'}</button></div>
             </form>
           </div>
           <div className="lg:col-span-2 space-y-4">
@@ -1322,7 +1345,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
             const ch = { ...newRecord.chapters[chIdx] };
             (ch as any)[field] = isNaN(numVal) ? undefined : numVal;
             
-            // FIX: Sertakan ch.sum ke dalam scoreFields untuk perhitungan Rata-Rata (RR) Bab
+            // Sertakan ch.sum ke dalam scoreFields untuk perhitungan Rata-Rata (RR) Bab
             const scoreFields = [ch.f1, ch.f2, ch.f3, ch.f4, ch.f5, ch.sum].filter((n) => typeof n === 'number' && !isNaN(n)) as number[];
             
             if (scoreFields.length > 0) { 
@@ -1668,7 +1691,6 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 min-h-[600px] flex flex-col animate-fade-in">
-      {/* UI Navigation cleaned up: Navigation bar removed as it's now handled by the main app navigation */}
       <div className="p-6 flex-1 overflow-y-auto">
          {activeTab === 'CLASS' && (
             <div className="space-y-6 animate-fade-in">
