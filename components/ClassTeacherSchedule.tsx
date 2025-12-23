@@ -617,7 +617,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
       const stat = attendanceRecap[s.id] || {S:0, I:0, A:0};
       return {
         "No": idx + 1,
-        "Nama Siswa": stat.name,
+        "Nama Siswa": s.name,
         "Sakit": stat.S,
         "Izin": stat.I,
         "Alpha": stat.A,
@@ -639,7 +639,6 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
     const filteredStudents = students.filter(s => s.className === gradeClass);
     
     // Create detailed headers matching UI
-    // Fix: Using any[] to bypass strict typing issues with fillColor in multi-row headers
     const headRow1: any[] = [
       { content: 'No', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } },
       { content: 'Nama Siswa', rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }
@@ -781,12 +780,12 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
     doc.setFontSize(10); doc.text(`Semester ${appSettings.semester} TA ${appSettings.academicYear}`, 14, 21);
     
     const body = filteredAttitudeHistory.map((r, idx) => [
-      idx + 1, r.date, r.className, students.find(s => s.id === r.studentId)?.name || '-', r.behavior, r.actionTaken
+      idx + 1, r.date, r.className, students.find(s => s.id === r.studentId)?.name || '-', r.behavior, r.actionTaken, r.notes || '-'
     ]);
 
     autoTable(doc, {
       startY: 25,
-      head: [['No', 'Tanggal', 'Kelas', 'Siswa', 'Perilaku', 'Tindak Lanjut']],
+      head: [['No', 'Tanggal', 'Kelas', 'Siswa', 'Perilaku', 'Tindak Lanjut', 'Keterangan']],
       body: body,
       theme: 'grid',
       styles: { fontSize: 8 }
@@ -804,7 +803,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
       "Nama Siswa": students.find(s => s.id === r.studentId)?.name || '-',
       "Kejadian / Perilaku": r.behavior,
       "Tindak Lanjut": r.actionTaken,
-      "Keterangan": r.notes
+      "Keterangan": r.notes || '-'
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -1576,13 +1575,22 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="min-w-full divide-y divide-gray-200 text-xs">
-                    <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left font-bold text-gray-600 w-24">Tanggal</th><th className="px-4 py-3 text-left font-bold text-gray-600">Siswa</th><th className="px-4 py-3 text-left font-bold text-gray-600">Masalah</th><th className="px-4 py-3 text-center font-bold text-gray-600 w-16">Aksi</th></tr></thead>
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-bold text-gray-600 w-24">Tanggal</th>
+                        <th className="px-4 py-3 text-left font-bold text-gray-600">Siswa</th>
+                        <th className="px-4 py-3 text-left font-bold text-gray-600">Masalah</th>
+                        <th className="px-4 py-3 text-left font-bold text-gray-600">Solusi / Tindak Lanjut</th>
+                        <th className="px-4 py-3 text-center font-bold text-gray-600 w-16">Aksi</th>
+                      </tr>
+                    </thead>
                     <tbody className="divide-y divide-gray-200">
                       {filteredHomeroomHistory.map(rec => (
                         <tr key={rec.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{rec.date}</td>
                           <td className="px-4 py-2 font-bold text-indigo-700">{students.find(s => s.id === rec.studentId)?.name || 'N/A'}</td>
                           <td className="px-4 py-2 text-gray-600 font-medium">{rec.violationType}</td>
+                          <td className="px-4 py-2 text-gray-500 italic">{rec.solution || '-'}</td>
                           <td className="px-4 py-2 text-center">
                             <div className="flex justify-center gap-1">
                               <button onClick={() => {setEditingHomeroomId(rec.id); setHomeroomForm({date: rec.date, className: rec.className, studentIds: [rec.studentId], violationType: rec.violationType, solution: rec.solution, notes: rec.notes}); window.scrollTo({top:0, behavior:'smooth'});}} className="text-blue-500 hover:bg-blue-50 p-1 rounded transition-colors"><Edit2 size={14}/></button>
@@ -1592,7 +1600,7 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
                         </tr>
                       ))}
                       {filteredHomeroomHistory.length === 0 && (
-                        <tr><td colSpan={4} className="py-10 text-center text-gray-400 italic">Tidak ada catatan ditemukan.</td></tr>
+                        <tr><td colSpan={5} className="py-10 text-center text-gray-400 italic">Tidak ada catatan ditemukan.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1668,16 +1676,16 @@ const ClassTeacherSchedule: React.FC<ClassTeacherScheduleProps> = ({
                     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
                         <div className="overflow-x-auto custom-scrollbar">
                             <table className="min-w-full divide-y divide-gray-200 text-xs">
-                                <thead className="bg-gray-50"><tr><th className="px-3 py-3 text-left font-bold text-gray-600 w-8">No</th><th className="px-3 py-3 text-left font-bold text-gray-600 w-24">Tanggal</th><th className="px-3 py-3 text-left font-bold text-gray-600">Siswa</th><th className="px-3 py-3 text-left font-bold text-gray-600">Kejadian</th><th className="px-3 py-3 text-left font-bold text-gray-600">Tindak Lanjut</th><th className="px-3 py-3 text-center font-bold text-gray-600 w-16">Aksi</th></tr></thead>
+                                <thead className="bg-gray-50"><tr><th className="px-3 py-3 text-left font-bold text-gray-600 w-8">No</th><th className="px-3 py-3 text-left font-bold text-gray-600 w-24">Tanggal</th><th className="px-3 py-3 text-left font-bold text-gray-600">Siswa</th><th className="px-3 py-3 text-left font-bold text-gray-600">Kejadian</th><th className="px-3 py-3 text-left font-bold text-gray-600">Tindak Lanjut</th><th className="px-3 py-3 text-left font-bold text-gray-600">Keterangan</th><th className="px-3 py-3 text-center font-bold text-gray-600 w-16">Aksi</th></tr></thead>
                                 <tbody className="divide-y divide-gray-200">
                                     {filteredAttitudeHistory.map((r, idx) => {
                                         const isNegative = ATTITUDE_BEHAVIORS.NEGATIVE.some(n => n.behavior === r.behavior);
                                         return (
-                                            <tr key={r.id} className="hover:bg-gray-50 transition-colors"><td className="px-3 py-2 text-gray-500 text-center">{idx + 1}</td><td className="px-3 py-2 whitespace-nowrap">{r.date} <span className="text-indigo-600 font-bold ml-1">[{r.className}]</span></td><td className="px-3 py-2 font-medium">{students.find(s => s.id === r.studentId)?.name || 'N/A'}</td><td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-full font-medium ${isNegative ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{r.behavior}</span></td><td className="px-3 py-2 text-gray-600 italic">"{r.actionTaken}"</td><td className="px-3 py-2 text-center"><div className="flex justify-center gap-1"><button onClick={() => {setEditingAttitudeId(r.id); setAttitudeForm({date: r.date, className: r.className, studentIds: [r.studentId], behavior: r.behavior, actionTaken: r.actionTaken, notes: r.notes});}} className="text-blue-500 hover:bg-blue-50 p-1 rounded"><Edit2 size={14}/></button><button onClick={() => onDeleteAttitudeRecord && onDeleteAttitudeRecord(r.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={14}/></button></div></td></tr>
+                                            <tr key={r.id} className="hover:bg-gray-50 transition-colors"><td className="px-3 py-2 text-gray-500 text-center">{idx + 1}</td><td className="px-3 py-2 whitespace-nowrap">{r.date} <span className="text-indigo-600 font-bold ml-1">[{r.className}]</span></td><td className="px-3 py-2 font-medium">{students.find(s => s.id === r.studentId)?.name || 'N/A'}</td><td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded-full font-medium ${isNegative ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{r.behavior}</span></td><td className="px-3 py-2 text-gray-600 italic">"{r.actionTaken}"</td><td className="px-3 py-2 text-gray-500 truncate max-w-[150px]" title={r.notes}>{r.notes || '-'}</td><td className="px-3 py-2 text-center"><div className="flex justify-center gap-1"><button onClick={() => {setEditingAttitudeId(r.id); setAttitudeForm({date: r.date, className: r.className, studentIds: [r.studentId], behavior: r.behavior, actionTaken: r.actionTaken, notes: r.notes});}} className="text-blue-500 hover:bg-blue-50 p-1 rounded"><Edit2 size={14}/></button><button onClick={() => onDeleteAttitudeRecord && onDeleteAttitudeRecord(r.id)} className="text-red-500 hover:bg-red-50 p-1 rounded"><Trash2 size={14}/></button></div></td></tr>
                                         );
                                     })}
                                     {filteredAttitudeHistory.length === 0 && (
-                                        <tr><td colSpan={6} className="px-3 py-10 text-center text-gray-400 italic">Belum ada riwayat penilaian sikap.</td></tr>
+                                        <tr><td colSpan={7} className="px-3 py-10 text-center text-gray-400 italic">Belum ada riwayat penilaian sikap.</td></tr>
                                     )}
                                 </tbody>
                             </table>

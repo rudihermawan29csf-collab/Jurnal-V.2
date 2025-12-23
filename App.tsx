@@ -82,8 +82,6 @@ const App: React.FC = () => {
       if (sheetApi.isConfigured()) {
         setIsCloudConfigured(true);
         handleRefreshData(false); // Ambil data diam-diam saat start
-      } else {
-        console.warn("VITE_SHEET_URL tidak terdeteksi. Aplikasi berjalan dalam mode Lokal.");
       }
     };
     loadInitialData();
@@ -117,10 +115,7 @@ const App: React.FC = () => {
   };
 
   const handleRefreshData = async (showNotification = true) => {
-    if (!sheetApi.isConfigured()) {
-      if (showNotification) alert("Cloud belum dikonfigurasi di Vercel (VITE_SHEET_URL).");
-      return;
-    }
+    if (!sheetApi.isConfigured()) return;
     
     setIsSyncing(true);
     setSyncError(null);
@@ -147,7 +142,6 @@ const App: React.FC = () => {
         if (showNotification) alert("Data berhasil diperbarui dari Cloud.");
     } else {
         setSyncError("Gagal Sinkronisasi.");
-        if (showNotification) alert("Gagal mengambil data. Periksa konsol browser (F12) untuk detail teknis.");
     }
   };
 
@@ -189,9 +183,6 @@ const App: React.FC = () => {
         { mode: ViewMode.MONITORING, label: 'Absensi', icon: <Users size={18} /> },
         { mode: ViewMode.GRADES, label: 'Nilai Siswa', icon: <GraduationCap size={18} /> },
         { mode: ViewMode.HOMEROOM, label: 'Catatan Wali Kelas', icon: <ClipboardList size={18} /> },
-    ] : []),
-    ...(userRole === 'STUDENT' ? [
-        { mode: ViewMode.CLASS_SCHEDULE, label: 'Lihat Jadwal', icon: <CalendarClock size={18} /> },
     ] : [])
   ];
 

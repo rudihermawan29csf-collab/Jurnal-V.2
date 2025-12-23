@@ -1,8 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
-import { UserCog, GraduationCap, Users, Lock, X, ChevronRight, User } from 'lucide-react';
+import { UserCog, GraduationCap, Lock, X, ChevronRight, User } from 'lucide-react';
 import { UserRole, AuthSettings, TeacherData } from '../types';
-import { CLASSES } from '../constants';
 
 interface LoginPageProps {
   onLogin: (role: UserRole, username?: string) => void;
@@ -11,7 +10,7 @@ interface LoginPageProps {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherData }) => {
-  const [activeModal, setActiveModal] = useState<UserRole>(null); // 'ADMIN' | 'TEACHER' | 'STUDENT'
+  const [activeModal, setActiveModal] = useState<UserRole>(null); // 'ADMIN' | 'TEACHER' | null
   
   // Login Form States
   const [selectedName, setSelectedName] = useState('');
@@ -50,24 +49,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherDat
       const storedPass = authSettings.teacherPasswords[selectedName];
       
       // LOGIC DEFAULT PASSWORD GURU
-      // Jika storedPass ada isinya, gunakan itu.
-      // Jika tidak ada (undefined/kosong), gunakan 'guru123'.
       const validPass = storedPass && storedPass.trim() !== '' ? storedPass : 'guru123';
 
       if (password === validPass) {
          onLogin('TEACHER', selectedName);
-      } else {
-         setError('Password salah!');
-      }
-    } 
-    else if (activeModal === 'STUDENT') {
-      if (!selectedName) {
-        setError('Pilih kelas terlebih dahulu.');
-        return;
-      }
-      const storedPass = authSettings.classPasswords[selectedName];
-      if (password === (storedPass || '')) {
-         onLogin('STUDENT', selectedName);
       } else {
          setError('Password salah!');
       }
@@ -78,7 +63,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherDat
     switch(activeModal) {
       case 'ADMIN': return 'Login Admin';
       case 'TEACHER': return 'Login Guru';
-      case 'STUDENT': return 'Login Siswa';
       default: return 'Login';
     }
   };
@@ -134,20 +118,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherDat
               </div>
               <ChevronRight className="text-gray-300 group-hover:text-emerald-600 transition-colors" />
             </button>
-
-            <button
-              onClick={() => setActiveModal('STUDENT')}
-              className="w-full group relative flex items-center p-4 border-2 border-gray-200 rounded-xl hover:border-orange-600 hover:bg-orange-50 transition-all duration-200"
-            >
-              <div className="p-3 bg-orange-100 text-orange-600 rounded-lg group-hover:bg-orange-600 group-hover:text-white transition-colors">
-                <Users size={24} />
-              </div>
-              <div className="ml-4 text-left flex-1">
-                <p className="text-lg font-bold text-gray-800 group-hover:text-orange-700">Ketua Kelas / Siswa</p>
-                <p className="text-xs text-gray-500">Lihat jadwal pelajaran kelas</p>
-              </div>
-              <ChevronRight className="text-gray-300 group-hover:text-orange-600 transition-colors" />
-            </button>
           </div>
         </div>
       </div>
@@ -170,7 +140,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherDat
             
             <form onSubmit={handleLoginSubmit}>
               
-              {/* Identity Selector for Teacher/Student */}
+              {/* Identity Selector for Teacher */}
               {activeModal === 'TEACHER' && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Pilih Nama Guru</label>
@@ -184,23 +154,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, authSettings, teacherDat
                       {teacherNames.map(name => <option key={name} value={name}>{name}</option>)}
                     </select>
                     <User className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                  </div>
-                </div>
-              )}
-
-              {activeModal === 'STUDENT' && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Pilih Kelas</label>
-                  <div className="relative">
-                    <select 
-                      value={selectedName}
-                      onChange={(e) => setSelectedName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none appearance-none"
-                    >
-                      <option value="">-- Pilih Kelas --</option>
-                      {CLASSES.map(cls => <option key={cls} value={cls}>{cls}</option>)}
-                    </select>
-                    <Users className="absolute left-3 top-2.5 text-gray-400" size={18} />
                   </div>
                 </div>
               )}
