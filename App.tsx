@@ -54,6 +54,75 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // --- PERSISTENCE HANDLERS ---
+  const syncData = (key: string, value: any) => {
+    // 1. Save to Local Storage (Immediate)
+    localStorage.setItem(key, JSON.stringify(value));
+
+    // 2. Save to Cloud (Debounced)
+    if (isCloudConfigured) {
+      if (saveTimeouts.current[key]) {
+        clearTimeout(saveTimeouts.current[key]);
+      }
+      
+      // Debounce 0.5 detik (dipercepat agar data admin cepat tersimpan)
+      saveTimeouts.current[key] = setTimeout(() => {
+        sheetApi.save(key, value).catch(err => console.error(`Failed to sync ${key}:`, err));
+      }, 500);
+    }
+  };
+
+  const handleRefreshData = async (showNotification = true) => {
+    if (!sheetApi.isConfigured()) return;
+    
+    setIsSyncing(true);
+    setSyncError(null);
+    const cloudData = await sheetApi.fetchAll();
+    setIsSyncing(false);
+
+    if (cloudData) {
+        // SAFETY CHECK: Deteksi jika data cloud kosong (kemungkinan reset/error)
+        const isCloudTeacherEmpty = !cloudData.teacherData || (Array.isArray(cloudData.teacherData) && cloudData.teacherData.length === 0);
+        const isLocalTeacherPopulated = teachers.length > 0;
+
+        if (isCloudTeacherEmpty && isLocalTeacherPopulated) {
+           if (showNotification) {
+             const confirmOverwrite = window.confirm(
+               "PERINGATAN: Data Guru di Cloud tampak KOSONG/RESET.\n\n" +
+               "Apakah Anda yakin ingin menimpa data di aplikasi ini dengan data kosong dari Cloud?\n\n" +
+               "Klik 'OK' untuk MENIMPA (Data lokal hilang).\n" +
+               "Klik 'Cancel' untuk MEMBATALKAN (Pertahankan data lokal)."
+             );
+             if (!confirmOverwrite) return;
+           } else {
+             // Jika silent fetch (startup) dan data cloud kosong, JANGAN lakukan apa-apa untuk keamanan
+             console.warn("Silent fetch aborted: Cloud data is empty, preserving local data.");
+             return; 
+           }
+        }
+
+        if(cloudData.teacherData) setTeachers(cloudData.teacherData);
+        if(cloudData.scheduleMap) setScheduleMap(cloudData.scheduleMap);
+        if(cloudData.appSettings) setAppSettings(cloudData.appSettings);
+        if(cloudData.authSettings) setAuthSettings(cloudData.authSettings);
+        if(cloudData.unavailableConstraints) setUnavailableConstraints(cloudData.unavailableConstraints);
+        if(cloudData.calendarEvents) setCalendarEvents(cloudData.calendarEvents);
+        if(cloudData.teacherLeaves) setTeacherLeaves(cloudData.teacherLeaves);
+        if(cloudData.students) setStudents(cloudData.students);
+        if(cloudData.teachingMaterials) setTeachingMaterials(cloudData.teachingMaterials);
+        if(cloudData.teachingJournals) setTeachingJournals(cloudData.teachingJournals);
+        if(cloudData.studentGrades) setStudentGrades(cloudData.studentGrades);
+        if(cloudData.homeroomRecords) setHomeroomRecords(cloudData.homeroomRecords);
+        if(cloudData.attitudeRecords) setAttitudeRecords(cloudData.attitudeRecords);
+        if(cloudData.teacherAgendas) setTeacherAgendas(cloudData.teacherAgendas);
+        
+        setLastSyncTime(new Date().toLocaleTimeString());
+        if (showNotification) alert("Data berhasil diperbarui dari Cloud.");
+    } else {
+        setSyncError("Gagal Sinkronisasi.");
+    }
+  };
+
   // --- INITIAL DATA FETCH ---
   useEffect(() => {
     const loadInitialData = async () => {
@@ -81,33 +150,16 @@ const App: React.FC = () => {
         }
       });
 
-      // 2. Cek Konfigurasi Cloud
+      // 2. Cek Konfigurasi Cloud & AMBIL DATA (PENTING: Diaktifkan kembali untuk sync)
       if (sheetApi.isConfigured()) {
         setIsCloudConfigured(true);
-        // NOTE: Auto-fetch removed to prevent overwriting local data with potentially empty cloud data on startup.
-        // Data will sync to cloud upon first modification or manual refresh.
+        // Memanggil fetch secara diam-diam (false) saat aplikasi dibuka
+        // Ini memastikan Guru mendapatkan data terbaru dari Admin
+        handleRefreshData(false);
       }
     };
     loadInitialData();
   }, []);
-
-  // --- PERSISTENCE HANDLERS ---
-  const syncData = (key: string, value: any) => {
-    // 1. Save to Local Storage (Immediate)
-    localStorage.setItem(key, JSON.stringify(value));
-
-    // 2. Save to Cloud (Debounced)
-    if (isCloudConfigured) {
-      if (saveTimeouts.current[key]) {
-        clearTimeout(saveTimeouts.current[key]);
-      }
-      
-      // Debounce 2 detik untuk mengurangi traffic ke Google Sheets dan mencegah rate limit
-      saveTimeouts.current[key] = setTimeout(() => {
-        sheetApi.save(key, value).catch(err => console.error(`Failed to sync ${key}:`, err));
-      }, 2000);
-    }
-  };
 
   useEffect(() => { syncData('appSettings', appSettings); }, [appSettings]);
   useEffect(() => { syncData('authSettings', authSettings); }, [authSettings]);
@@ -128,51 +180,6 @@ const App: React.FC = () => {
     alert("Jadwal disimpan ke Lokal & Cloud!");
   };
 
-  const handleRefreshData = async (showNotification = true) => {
-    if (!sheetApi.isConfigured()) return;
-    
-    setIsSyncing(true);
-    setSyncError(null);
-    const cloudData = await sheetApi.fetchAll();
-    setIsSyncing(false);
-
-    if (cloudData) {
-        // SAFETY CHECK: Deteksi jika data cloud kosong (kemungkinan reset/error)
-        const isCloudTeacherEmpty = !cloudData.teacherData || (Array.isArray(cloudData.teacherData) && cloudData.teacherData.length === 0);
-        const isLocalTeacherPopulated = teachers.length > 0;
-
-        if (isCloudTeacherEmpty && isLocalTeacherPopulated && showNotification) {
-           const confirmOverwrite = window.confirm(
-             "PERINGATAN: Data Guru di Cloud tampak KOSONG.\n\n" +
-             "Apakah Anda yakin ingin menimpa data di aplikasi ini dengan data kosong dari Cloud?\n\n" +
-             "Klik 'OK' untuk MENIMPA (Data lokal hilang).\n" +
-             "Klik 'Cancel' untuk MEMBATALKAN (Pertahankan data lokal)."
-           );
-           if (!confirmOverwrite) return;
-        }
-
-        if(cloudData.teacherData) setTeachers(cloudData.teacherData);
-        if(cloudData.scheduleMap) setScheduleMap(cloudData.scheduleMap);
-        if(cloudData.appSettings) setAppSettings(cloudData.appSettings);
-        if(cloudData.authSettings) setAuthSettings(cloudData.authSettings);
-        if(cloudData.unavailableConstraints) setUnavailableConstraints(cloudData.unavailableConstraints);
-        if(cloudData.calendarEvents) setCalendarEvents(cloudData.calendarEvents);
-        if(cloudData.teacherLeaves) setTeacherLeaves(cloudData.teacherLeaves);
-        if(cloudData.students) setStudents(cloudData.students);
-        if(cloudData.teachingMaterials) setTeachingMaterials(cloudData.teachingMaterials);
-        if(cloudData.teachingJournals) setTeachingJournals(cloudData.teachingJournals);
-        if(cloudData.studentGrades) setStudentGrades(cloudData.studentGrades);
-        if(cloudData.homeroomRecords) setHomeroomRecords(cloudData.homeroomRecords);
-        if(cloudData.attitudeRecords) setAttitudeRecords(cloudData.attitudeRecords);
-        if(cloudData.teacherAgendas) setTeacherAgendas(cloudData.teacherAgendas);
-        
-        setLastSyncTime(new Date().toLocaleTimeString());
-        if (showNotification) alert("Data berhasil diperbarui dari Cloud.");
-    } else {
-        setSyncError("Gagal Sinkronisasi.");
-    }
-  };
-
   // --- EVENT LISTENERS ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -187,6 +194,11 @@ const App: React.FC = () => {
     setUserRole(role);
     if (username) setCurrentUser(username);
     setViewMode(role === 'ADMIN' ? ViewMode.TABLE : ViewMode.CLASS_SCHEDULE);
+    
+    // Opsional: Paksa refresh data lagi saat login berhasil untuk memastikan data fresh
+    if (sheetApi.isConfigured()) {
+        handleRefreshData(false);
+    }
   };
 
   const handleLogout = () => { setUserRole(null); setCurrentUser(''); setIsMenuOpen(false); };
