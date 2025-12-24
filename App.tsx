@@ -22,6 +22,9 @@ const App: React.FC = () => {
   const [lastSyncTime, setLastSyncTime] = useState<string>('-');
   const [syncError, setSyncError] = useState<string | null>(null);
 
+  // Debounce Ref for Cloud Saving
+  const saveTimeouts = useRef<Record<string, any>>({});
+
   // --- DATA STATES ---
   const [appSettings, setAppSettings] = useState<AppSettings>({
     academicYear: '2025/2026',
@@ -78,10 +81,11 @@ const App: React.FC = () => {
         }
       });
 
-      // 2. Ambil dari Cloud jika tersedia
+      // 2. Cek Konfigurasi Cloud
       if (sheetApi.isConfigured()) {
         setIsCloudConfigured(true);
-        handleRefreshData(false); // Ambil data diam-diam saat start
+        // NOTE: Auto-fetch removed to prevent overwriting local data with potentially empty cloud data on startup.
+        // Data will sync to cloud upon first modification or manual refresh.
       }
     };
     loadInitialData();
@@ -89,9 +93,19 @@ const App: React.FC = () => {
 
   // --- PERSISTENCE HANDLERS ---
   const syncData = (key: string, value: any) => {
+    // 1. Save to Local Storage (Immediate)
     localStorage.setItem(key, JSON.stringify(value));
+
+    // 2. Save to Cloud (Debounced)
     if (isCloudConfigured) {
-      sheetApi.save(key, value);
+      if (saveTimeouts.current[key]) {
+        clearTimeout(saveTimeouts.current[key]);
+      }
+      
+      // Debounce 2 detik untuk mengurangi traffic ke Google Sheets dan mencegah rate limit
+      saveTimeouts.current[key] = setTimeout(() => {
+        sheetApi.save(key, value).catch(err => console.error(`Failed to sync ${key}:`, err));
+      }, 2000);
     }
   };
 
@@ -123,6 +137,20 @@ const App: React.FC = () => {
     setIsSyncing(false);
 
     if (cloudData) {
+        // SAFETY CHECK: Deteksi jika data cloud kosong (kemungkinan reset/error)
+        const isCloudTeacherEmpty = !cloudData.teacherData || (Array.isArray(cloudData.teacherData) && cloudData.teacherData.length === 0);
+        const isLocalTeacherPopulated = teachers.length > 0;
+
+        if (isCloudTeacherEmpty && isLocalTeacherPopulated && showNotification) {
+           const confirmOverwrite = window.confirm(
+             "PERINGATAN: Data Guru di Cloud tampak KOSONG.\n\n" +
+             "Apakah Anda yakin ingin menimpa data di aplikasi ini dengan data kosong dari Cloud?\n\n" +
+             "Klik 'OK' untuk MENIMPA (Data lokal hilang).\n" +
+             "Klik 'Cancel' untuk MEMBATALKAN (Pertahankan data lokal)."
+           );
+           if (!confirmOverwrite) return;
+        }
+
         if(cloudData.teacherData) setTeachers(cloudData.teacherData);
         if(cloudData.scheduleMap) setScheduleMap(cloudData.scheduleMap);
         if(cloudData.appSettings) setAppSettings(cloudData.appSettings);
