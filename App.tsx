@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TeacherTable from './components/TeacherTable';
 import ScheduleTable from './components/ScheduleTable';
 import GeminiAssistant from './components/GeminiAssistant';
@@ -8,7 +8,7 @@ import LoginPage from './components/LoginPage';
 import SettingsPanel from './components/SettingsPanel';
 import { ViewMode, TeacherData, UserRole, AppSettings, AuthSettings, CalendarEvent, TeacherLeave, TeachingMaterial, TeachingJournal, Student, GradeRecord, HomeroomRecord, AttitudeRecord, TeacherAgenda } from './types';
 import { TEACHER_DATA as INITIAL_DATA, INITIAL_STUDENTS, DEFAULT_SCHEDULE_MAP } from './constants';
-import { Table as TableIcon, Search, Calendar, Ban, CalendarClock, Settings, Menu, LogOut, ChevronDown, BookOpen, Users, GraduationCap, ClipboardList, User, Cloud, CloudOff, RefreshCw, AlertCircle, Heart, FileText } from 'lucide-react';
+import { Table as TableIcon, Search, Calendar, Ban, CalendarClock, Settings, Menu, LogOut, ChevronDown, BookOpen, Users, GraduationCap, ClipboardList, User, Cloud, CloudOff, RefreshCw, AlertCircle, Heart, FileText, CheckCircle2, Loader2 } from 'lucide-react';
 import { sheetApi } from './services/sheetApi';
 
 const App: React.FC = () => {
@@ -19,6 +19,7 @@ const App: React.FC = () => {
   // --- SYNC STATE ---
   const [isCloudConfigured, setIsCloudConfigured] = useState(sheetApi.isConfigured());
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // New: Indikator sedang menyimpan
   const [lastSyncTime, setLastSyncTime] = useState<string>('-');
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -55,24 +56,36 @@ const App: React.FC = () => {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // --- PERSISTENCE HANDLERS ---
-  const syncData = (key: string, value: any) => {
+  const syncData = useCallback((key: string, value: any) => {
     // 1. Save to Local Storage (Immediate)
     localStorage.setItem(key, JSON.stringify(value));
 
     // 2. Save to Cloud (Debounced)
     if (isCloudConfigured) {
+      setIsSaving(true); // Set status saving
       if (saveTimeouts.current[key]) {
         clearTimeout(saveTimeouts.current[key]);
       }
       
-      // Debounce 0.5 detik (dipercepat agar data admin cepat tersimpan)
+      // Debounce 0.5 detik
       saveTimeouts.current[key] = setTimeout(() => {
-        sheetApi.save(key, value).catch(err => console.error(`Failed to sync ${key}:`, err));
+        sheetApi.save(key, value)
+          .then(() => {
+             // Cek apakah masih ada timeout lain yang berjalan
+             const anyPending = Object.values(saveTimeouts.current).some((t: any) => t && t['_idleTimeout'] !== -1); 
+             // Note: _idleTimeout check is internal node/browser specific, simple heuristic:
+             // Kita set timer saving false setelah 1 detik idle
+             setTimeout(() => setIsSaving(false), 500);
+          })
+          .catch(err => {
+            console.error(`Failed to sync ${key}:`, err);
+            setIsSaving(false);
+          });
       }, 500);
     }
-  };
+  }, [isCloudConfigured]);
 
-  const handleRefreshData = async (showNotification = true) => {
+  const handleRefreshData = useCallback(async (showNotification = true) => {
     if (!sheetApi.isConfigured()) return;
     
     setIsSyncing(true);
@@ -81,26 +94,33 @@ const App: React.FC = () => {
     setIsSyncing(false);
 
     if (cloudData) {
-        // SAFETY CHECK: Deteksi jika data cloud kosong (kemungkinan reset/error)
+        // SAFETY CHECK: Deteksi jika data cloud BENAR-BENAR kosong (Fresh Sheet)
+        // Kita cek teacherData DAN students. Jika keduanya kosong, kemungkinan sheet baru/reset.
         const isCloudTeacherEmpty = !cloudData.teacherData || (Array.isArray(cloudData.teacherData) && cloudData.teacherData.length === 0);
-        const isLocalTeacherPopulated = teachers.length > 0;
+        const isCloudStudentEmpty = !cloudData.students || (Array.isArray(cloudData.students) && cloudData.students.length === 0);
+        const isLocalTeacherPopulated = teachers.length > 5; // Minimal ada data default
 
-        if (isCloudTeacherEmpty && isLocalTeacherPopulated) {
+        // Logic Baru:
+        // Jika Fetch Manual (Tombol): Selalu tanya jika data cloud terlihat kosong tapi lokal penuh.
+        // Jika Silent Fetch (Startup/Focus): Percaya Cloud, KECUALI cloud benar-benar kosong total.
+        
+        if (isCloudTeacherEmpty && isCloudStudentEmpty && isLocalTeacherPopulated) {
            if (showNotification) {
              const confirmOverwrite = window.confirm(
-               "PERINGATAN: Data Guru di Cloud tampak KOSONG/RESET.\n\n" +
+               "PERINGATAN: Data di Cloud tampak KOSONG (Reset).\n\n" +
                "Apakah Anda yakin ingin menimpa data di aplikasi ini dengan data kosong dari Cloud?\n\n" +
                "Klik 'OK' untuk MENIMPA (Data lokal hilang).\n" +
                "Klik 'Cancel' untuk MEMBATALKAN (Pertahankan data lokal)."
              );
              if (!confirmOverwrite) return;
            } else {
-             // Jika silent fetch (startup) dan data cloud kosong, JANGAN lakukan apa-apa untuk keamanan
-             console.warn("Silent fetch aborted: Cloud data is empty, preserving local data.");
+             // Silent fetch pada data kosong total -> Abort untuk keamanan data lokal
+             console.warn("Silent sync aborted: Cloud appears empty/reset.");
              return; 
            }
         }
 
+        // Apply Data from Cloud (Source of Truth)
         if(cloudData.teacherData) setTeachers(cloudData.teacherData);
         if(cloudData.scheduleMap) setScheduleMap(cloudData.scheduleMap);
         if(cloudData.appSettings) setAppSettings(cloudData.appSettings);
@@ -117,16 +137,17 @@ const App: React.FC = () => {
         if(cloudData.teacherAgendas) setTeacherAgendas(cloudData.teacherAgendas);
         
         setLastSyncTime(new Date().toLocaleTimeString());
-        if (showNotification) alert("Data berhasil diperbarui dari Cloud.");
+        if (showNotification) alert("Data berhasil disinkronkan dengan Cloud.");
     } else {
-        setSyncError("Gagal Sinkronisasi.");
+        setSyncError("Gagal terhubung ke Cloud.");
+        if (showNotification) alert("Gagal mengambil data. Cek koneksi internet.");
     }
-  };
+  }, [teachers.length]);
 
   // --- INITIAL DATA FETCH ---
   useEffect(() => {
     const loadInitialData = async () => {
-      // 1. Ambil dari LocalStorage (Data Lokal)
+      // 1. Ambil dari LocalStorage (Data Lokal) agar UI langsung muncul
       const keys = ['appSettings', 'teacherData', 'scheduleMap', 'authSettings', 'unavailableConstraints', 'calendarEvents', 'teacherLeaves', 'students', 'teachingMaterials', 'teachingJournals', 'studentGrades', 'homeroomRecords', 'attitudeRecords', 'teacherAgendas'];
       
       keys.forEach(key => {
@@ -150,37 +171,51 @@ const App: React.FC = () => {
         }
       });
 
-      // 2. Cek Konfigurasi Cloud & AMBIL DATA (PENTING: Diaktifkan kembali untuk sync)
+      // 2. Cek Konfigurasi Cloud & AMBIL DATA TERBARU
       if (sheetApi.isConfigured()) {
         setIsCloudConfigured(true);
-        // Memanggil fetch secara diam-diam (false) saat aplikasi dibuka
-        // Ini memastikan Guru mendapatkan data terbaru dari Admin
+        // Fetch silent saat startup untuk memastikan data sinkron antar device
         handleRefreshData(false);
       }
     };
     loadInitialData();
-  }, []);
+  }, [handleRefreshData]);
 
-  useEffect(() => { syncData('appSettings', appSettings); }, [appSettings]);
-  useEffect(() => { syncData('authSettings', authSettings); }, [authSettings]);
-  useEffect(() => { syncData('teacherData', teachers); }, [teachers]);
-  useEffect(() => { syncData('unavailableConstraints', unavailableConstraints); }, [unavailableConstraints]);
-  useEffect(() => { syncData('calendarEvents', calendarEvents); }, [calendarEvents]);
-  useEffect(() => { syncData('teacherLeaves', teacherLeaves); }, [teacherLeaves]);
-  useEffect(() => { syncData('students', students); }, [students]);
-  useEffect(() => { syncData('teachingMaterials', teachingMaterials); }, [teachingMaterials]);
-  useEffect(() => { syncData('teachingJournals', teachingJournals); }, [teachingJournals]);
-  useEffect(() => { syncData('studentGrades', studentGrades); }, [studentGrades]);
-  useEffect(() => { syncData('homeroomRecords', homeroomRecords); }, [homeroomRecords]);
-  useEffect(() => { syncData('attitudeRecords', attitudeRecords); }, [attitudeRecords]);
-  useEffect(() => { syncData('teacherAgendas', teacherAgendas); }, [teacherAgendas]);
+  // --- AUTO REFRESH ON FOCUS ---
+  // Fitur ini memastikan jika user pindah tab (Laptop B) lalu kembali, data di-refresh
+  useEffect(() => {
+    const onFocus = () => {
+        if (isCloudConfigured) {
+            console.log("App focused, checking for updates...");
+            handleRefreshData(false);
+        }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [isCloudConfigured, handleRefreshData]);
+
+  // --- DATA CHANGE LISTENERS (Auto Save) ---
+  // Gunakan useEffect untuk mendeteksi perubahan state dan menyimpannya
+  useEffect(() => { syncData('appSettings', appSettings); }, [appSettings, syncData]);
+  useEffect(() => { syncData('authSettings', authSettings); }, [authSettings, syncData]);
+  useEffect(() => { syncData('teacherData', teachers); }, [teachers, syncData]);
+  useEffect(() => { syncData('unavailableConstraints', unavailableConstraints); }, [unavailableConstraints, syncData]);
+  useEffect(() => { syncData('calendarEvents', calendarEvents); }, [calendarEvents, syncData]);
+  useEffect(() => { syncData('teacherLeaves', teacherLeaves); }, [teacherLeaves, syncData]);
+  useEffect(() => { syncData('students', students); }, [students, syncData]);
+  useEffect(() => { syncData('teachingMaterials', teachingMaterials); }, [teachingMaterials, syncData]);
+  useEffect(() => { syncData('teachingJournals', teachingJournals); }, [teachingJournals, syncData]);
+  useEffect(() => { syncData('studentGrades', studentGrades); }, [studentGrades, syncData]);
+  useEffect(() => { syncData('homeroomRecords', homeroomRecords); }, [homeroomRecords, syncData]);
+  useEffect(() => { syncData('attitudeRecords', attitudeRecords); }, [attitudeRecords, syncData]);
+  useEffect(() => { syncData('teacherAgendas', teacherAgendas); }, [teacherAgendas, syncData]);
 
   const handleSaveSchedule = () => {
     syncData('scheduleMap', scheduleMap);
     alert("Jadwal disimpan ke Lokal & Cloud!");
   };
 
-  // --- EVENT LISTENERS ---
+  // --- EVENT LISTENERS UI ---
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsMenuOpen(false);
@@ -195,7 +230,7 @@ const App: React.FC = () => {
     if (username) setCurrentUser(username);
     setViewMode(role === 'ADMIN' ? ViewMode.TABLE : ViewMode.CLASS_SCHEDULE);
     
-    // Opsional: Paksa refresh data lagi saat login berhasil untuk memastikan data fresh
+    // Refresh data saat login untuk memastikan user mendapat data terbaru
     if (sheetApi.isConfigured()) {
         handleRefreshData(false);
     }
@@ -239,9 +274,17 @@ const App: React.FC = () => {
                 <div className="flex flex-col mt-1">
                    <p className="text-[10px] text-gray-500 font-bold uppercase">Semester {appSettings.semester} • TA {appSettings.academicYear}</p>
                    {isCloudConfigured ? (
-                      <div className={`flex items-center gap-1 mt-1 text-[10px] font-bold ${syncError ? 'text-red-500' : 'text-green-600'}`}>
-                         {syncError ? <AlertCircle size={10}/> : <Cloud size={10} />}
-                         <span>{isSyncing ? 'Syncing...' : syncError ? 'Sync Error' : 'Cloud Sync: ON'}</span>
+                      <div className="flex items-center gap-3">
+                        <div className={`flex items-center gap-1 mt-1 text-[10px] font-bold ${syncError ? 'text-red-500' : 'text-green-600'}`}>
+                           {syncError ? <AlertCircle size={10}/> : <Cloud size={10} />}
+                           <span>{isSyncing ? 'Mengambil Data...' : syncError ? 'Gagal Sync' : 'Terhubung Cloud'}</span>
+                        </div>
+                        {isSaving && (
+                           <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-orange-500 animate-pulse">
+                              <Loader2 size={10} className="animate-spin" />
+                              <span>Menyimpan...</span>
+                           </div>
+                        )}
                       </div>
                    ) : (
                       <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400 font-bold"><CloudOff size={10} /><span>Lokal Only</span></div>
@@ -271,9 +314,9 @@ const App: React.FC = () => {
                     {isCloudConfigured && (
                        <div className="p-2 border-t border-gray-100 bg-gray-50/50">
                           <button onClick={() => { handleRefreshData(); setIsMenuOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2 text-sm font-bold text-green-700 hover:bg-green-100 rounded-lg">
-                             <RefreshCw size={18} className={isSyncing ? "animate-spin" : ""} /> Ambil Data Cloud
+                             <RefreshCw size={18} className={isSyncing ? "animate-spin" : ""} /> Update Data Cloud
                           </button>
-                          <p className="text-[9px] text-center text-gray-400 mt-1">Update Terakhir: {lastSyncTime}</p>
+                          <p className="text-[9px] text-center text-gray-400 mt-1">Terakhir: {lastSyncTime}</p>
                        </div>
                     )}
                     <div className="p-2 border-t border-gray-100 bg-red-50">
